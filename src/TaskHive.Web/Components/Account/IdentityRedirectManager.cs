@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Identity;
-using TaskHive.Web.Data;
+using TaskHive.Core.Data;
 
 namespace TaskHive.Web.Components.Account;
 

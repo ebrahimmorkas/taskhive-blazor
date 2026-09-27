@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
 using TaskHive.Web.Components.Account.Pages;
 using TaskHive.Web.Components.Account.Pages.Manage;
-using TaskHive.Web.Data;
+using TaskHive.Core.Data;
 
 namespace Microsoft.AspNetCore.Routing;
 

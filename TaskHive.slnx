@@ -1,5 +1,9 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/TaskHive.Core/TaskHive.Core.csproj" />
     <Project Path="src/TaskHive.Web/TaskHive.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TaskHive.Tests/TaskHive.Tests.csproj" />
   </Folder>
 </Solution>

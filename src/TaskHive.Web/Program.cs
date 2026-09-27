@@ -1,9 +1,10 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using TaskHive.Core;
 using TaskHive.Web.Components;
 using TaskHive.Web.Components.Account;
-using TaskHive.Web.Data;
+using TaskHive.Core.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,14 +23,15 @@ builder.Services.AddAuthentication(options =>
     })
     .AddIdentityCookies();
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(connectionString));
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+builder.Services.AddTaskHiveCore(connectionString);
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 
 builder.Services.AddIdentityCore<ApplicationUser>(options =>
     {
-        options.SignIn.RequireConfirmedAccount = true;
+        // Email confirmation is off so the demo works without an SMTP server.
+        options.SignIn.RequireConfirmedAccount = false;
         options.Stores.SchemaVersion = IdentitySchemaVersions.Version3;
     })
     .AddEntityFrameworkStores<ApplicationDbContext>()
@@ -48,8 +50,13 @@ if (app.Environment.IsDevelopment())
 else
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
+}
+
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
+{
+    await using var scope = app.Services.CreateAsyncScope();
+    await scope.ServiceProvider.GetRequiredService<ApplicationDbContext>().Database.MigrateAsync();
 }
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
@@ -63,4 +70,6 @@ app.MapRazorComponents<App>()
 // Add additional endpoints required by the Identity /Account Razor components.
 app.MapAdditionalIdentityEndpoints();
 
-app.Run();
+await app.RunAsync();
+
+public partial class Program;
