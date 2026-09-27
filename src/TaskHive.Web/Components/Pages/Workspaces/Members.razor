@@ -1,0 +1,127 @@
+@page "/w/{Slug}/members"
+@attribute [Authorize]
+@inject WorkspaceService WorkspaceService
+@inject CurrentUser CurrentUser
+@inject ISnackbar Snackbar
+
+<PageTitle>Members · TaskHive</PageTitle>
+
+@if (_error is not null)
+{
+    <EmptyState Icon="@Icons.Material.Filled.SearchOff" Title="Workspace not found" Message="@_error" />
+}
+else if (_workspace is not null)
+{
+    <MudText Typo="Typo.overline">@_workspace.Name</MudText>
+    <MudText Typo="Typo.h4" Class="mb-6">Members</MudText>
+
+    @if (_canManage)
+    {
+        <MudPaper Outlined="true" Elevation="0" Class="pa-4 mb-6">
+            <MudText Typo="Typo.subtitle1" Class="mb-2">Add a teammate</MudText>
+            <div class="d-flex gap-3 align-center flex-wrap">
+                <MudTextField @bind-Value="_email" Label="Email address" Variant="Variant.Outlined" Margin="Margin.Dense"
+                              InputType="InputType.Email" Style="min-width: 280px" Immediate="true" />
+                <MudSelect T="WorkspaceRole" @bind-Value="_role" Label="Role" Variant="Variant.Outlined" Margin="Margin.Dense" Style="max-width: 160px">
+                    <MudSelectItem Value="WorkspaceRole.Member">Member</MudSelectItem>
+                    <MudSelectItem Value="WorkspaceRole.Admin">Admin</MudSelectItem>
+                </MudSelect>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@string.IsNullOrWhiteSpace(_email)" OnClick="AddAsync">Add</MudButton>
+            </div>
+        </MudPaper>
+    }
+
+    <MudTable Items="_members" Hover="true" Elevation="0" Outlined="true" Dense="true">
+        <HeaderContent>
+            <MudTh>Name</MudTh>
+            <MudTh>Email</MudTh>
+            <MudTh>Role</MudTh>
+            <MudTh>Joined</MudTh>
+            <MudTh></MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Name">
+                <div class="d-flex align-center gap-2">
+                    <UserAvatar Name="@context.DisplayName" />
+                    @context.DisplayName
+                </div>
+            </MudTd>
+            <MudTd DataLabel="Email">@context.Email</MudTd>
+            <MudTd DataLabel="Role"><MudChip T="string" Size="Size.Small" Color="@RoleColor(context.Role)">@context.Role</MudChip></MudTd>
+            <MudTd DataLabel="Joined">@context.JoinedAtUtc.ToLocalTime().ToString("d MMM yyyy")</MudTd>
+            <MudTd>
+                @if (context.Role != WorkspaceRole.Owner && (_canManage || context.UserId == _userId))
+                {
+                    <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Text" OnClick="() => RemoveAsync(context)">
+                        @(context.UserId == _userId ? "Leave" : "Remove")
+                    </MudButton>
+                }
+            </MudTd>
+        </RowTemplate>
+    </MudTable>
+}
+
+@code {
+    [Parameter]
+    public string Slug { get; set; } = string.Empty;
+
+    private WorkspaceSummary? _workspace;
+    private IReadOnlyList<MemberInfo> _members = [];
+    private string? _error;
+    private string _userId = string.Empty;
+    private bool _canManage;
+    private string _email = string.Empty;
+    private WorkspaceRole _role = WorkspaceRole.Member;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _userId = await CurrentUser.GetIdAsync();
+        var result = await WorkspaceService.GetBySlugAsync(_userId, Slug);
+        if (result.IsFailure)
+        {
+            _error = result.Error!.Message;
+            return;
+        }
+
+        _workspace = result.Value;
+        _canManage = _workspace.Role is WorkspaceRole.Owner or WorkspaceRole.Admin;
+        await LoadMembersAsync();
+    }
+
+    private async Task LoadMembersAsync() =>
+        _members = (await WorkspaceService.GetMembersAsync(_userId, _workspace!.Id)).Value;
+
+    private async Task AddAsync()
+    {
+        var result = await WorkspaceService.AddMemberAsync(_userId, _workspace!.Id, _email, _role);
+        if (result.IsFailure)
+        {
+            Snackbar.Add(result.Error!.Message, Severity.Warning);
+            return;
+        }
+
+        Snackbar.Add($"{_email} added", Severity.Success);
+        _email = string.Empty;
+        await LoadMembersAsync();
+    }
+
+    private async Task RemoveAsync(MemberInfo member)
+    {
+        var result = await WorkspaceService.RemoveMemberAsync(_userId, _workspace!.Id, member.UserId);
+        if (result.IsFailure)
+        {
+            Snackbar.Add(result.Error!.Message, Severity.Warning);
+            return;
+        }
+
+        Snackbar.Add($"{member.DisplayName} removed", Severity.Info);
+        await LoadMembersAsync();
+    }
+
+    private static Color RoleColor(WorkspaceRole role) => role switch
+    {
+        WorkspaceRole.Owner => Color.Primary,
+        WorkspaceRole.Admin => Color.Secondary,
+        _ => Color.Default
+    };
+}

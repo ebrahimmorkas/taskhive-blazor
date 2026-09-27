@@ -1,0 +1,18 @@
+<MudItem xs="12" sm="4">
+    <MudPaper Elevation="0" Outlined="true" Class="pa-6 h-100">
+        <MudIcon Icon="@Icon" Color="Color.Primary" />
+        <MudText Typo="Typo.h6" Class="mt-2">@Title</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">@Text</MudText>
+    </MudPaper>
+</MudItem>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Icon { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter, EditorRequired]
+    public string Text { get; set; } = string.Empty;
+}

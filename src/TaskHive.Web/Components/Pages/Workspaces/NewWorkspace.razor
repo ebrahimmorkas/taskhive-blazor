@@ -1,0 +1,50 @@
+@page "/workspaces/new"
+@attribute [Authorize]
+@inject WorkspaceService WorkspaceService
+@inject CurrentUser CurrentUser
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>New workspace · TaskHive</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-6">Create a workspace</MudText>
+
+<MudPaper Class="pa-6" MaxWidth="560px" Outlined="true" Elevation="0">
+    <MudForm @ref="_form" @bind-IsValid="_isValid">
+        <MudTextField @bind-Value="_name" Label="Workspace name" Placeholder="e.g. Acme Marketing"
+                      Required="true" RequiredError="Give your workspace a name" MaxLength="100"
+                      Variant="Variant.Outlined" Immediate="true" AutoFocus="true" />
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            You'll be the owner and can invite teammates afterwards.
+        </MudText>
+    </MudForm>
+    <div class="d-flex justify-end gap-2 mt-6">
+        <MudButton Href="/" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Disabled="@(!_isValid || _saving)" OnClick="CreateAsync">
+            @(_saving ? "Creating…" : "Create workspace")
+        </MudButton>
+    </div>
+</MudPaper>
+
+@code {
+    private MudForm? _form;
+    private bool _isValid;
+    private bool _saving;
+    private string _name = string.Empty;
+
+    private async Task CreateAsync()
+    {
+        _saving = true;
+        var result = await WorkspaceService.CreateAsync(await CurrentUser.GetIdAsync(), _name);
+        _saving = false;
+
+        if (result.IsFailure)
+        {
+            Snackbar.Add(result.Error!.Message, Severity.Error);
+            return;
+        }
+
+        Snackbar.Add($"Workspace \"{result.Value.Name}\" created", Severity.Success);
+        Navigation.NavigateTo($"w/{result.Value.Slug}");
+    }
+}
