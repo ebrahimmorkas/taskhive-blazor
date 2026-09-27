@@ -1,0 +1,34 @@
+@page "/w/{Slug}"
+@attribute [Authorize]
+@inject WorkspaceService WorkspaceService
+@inject CurrentUser CurrentUser
+
+<PageTitle>@(_workspace?.Name ?? "Workspace") · TaskHive</PageTitle>
+
+@if (_error is not null)
+{
+    <EmptyState Icon="@Icons.Material.Filled.SearchOff" Title="Workspace not found" Message="@_error" />
+}
+else if (_workspace is not null)
+{
+    <MudText Typo="Typo.overline">Workspace</MudText>
+    <MudText Typo="Typo.h4" Class="mb-6">@_workspace.Name</MudText>
+
+    <EmptyState Icon="@Icons.Material.Filled.ViewKanban" Title="Projects are coming next"
+                Message="Boards for this workspace will appear here." />
+}
+
+@code {
+    [Parameter]
+    public string Slug { get; set; } = string.Empty;
+
+    private WorkspaceSummary? _workspace;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var result = await WorkspaceService.GetBySlugAsync(await CurrentUser.GetIdAsync(), Slug);
+        _workspace = result.IsSuccess ? result.Value : null;
+        _error = result.IsFailure ? result.Error!.Message : null;
+    }
+}
