@@ -1,92 +1,74 @@
-﻿@implements IDisposable
-
+@implements IDisposable
 @inject NavigationManager NavigationManager
+@inject WorkspaceService WorkspaceService
+@inject CurrentUser CurrentUser
 
-<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">TaskHive.Web</a>
-    </div>
-</div>
+<MudNavMenu Class="pt-2">
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">Home</MudNavLink>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+    <AuthorizeView>
+        <Authorized>
+            <MudText Typo="Typo.overline" Class="px-4 mt-4 d-block">Workspaces</MudText>
+            @foreach (var workspace in _workspaces)
+            {
+                <MudNavGroup Title="@workspace.Name" Icon="@Icons.Material.Filled.Workspaces" Expanded="@IsCurrent(workspace)">
+                    <MudNavLink Href="@($"w/{workspace.Slug}")" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.ViewKanban">Projects</MudNavLink>
+                    <MudNavLink Href="@($"w/{workspace.Slug}/members")" Icon="@Icons.Material.Filled.People">Members</MudNavLink>
+                </MudNavGroup>
+            }
+            <MudNavLink Href="/workspaces/new" Icon="@Icons.Material.Filled.Add">New workspace</MudNavLink>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="auth">
-                <span class="bi bi-lock-nav-menu" aria-hidden="true"></span> Auth Required
-            </NavLink>
-        </div>
-
-        <AuthorizeView>
-            <Authorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="Account/Manage">
-                        <span class="bi bi-person-fill-nav-menu" aria-hidden="true"></span> @context.User.Identity?.Name
-                    </NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <form action="Account/Logout" method="post">
-                        <AntiforgeryToken />
-                        <input type="hidden" name="ReturnUrl" value="@currentUrl" />
-                        <button type="submit" class="nav-link">
-                            <span class="bi bi-arrow-bar-left-nav-menu" aria-hidden="true"></span> Logout
-                        </button>
-                    </form>
-                </div>
-            </Authorized>
-            <NotAuthorized>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="Account/Register">
-                        <span class="bi bi-person-nav-menu" aria-hidden="true"></span> Register
-                    </NavLink>
-                </div>
-                <div class="nav-item px-3">
-                    <NavLink class="nav-link" href="Account/Login">
-                        <span class="bi bi-person-badge-nav-menu" aria-hidden="true"></span> Login
-                    </NavLink>
-                </div>
-            </NotAuthorized>
-        </AuthorizeView>
-    </nav>
-</div>
+            <MudDivider Class="my-4" />
+            <MudNavLink Href="Account/Manage" Icon="@Icons.Material.Filled.ManageAccounts">Account</MudNavLink>
+            <form action="Account/Logout" method="post">
+                <AntiforgeryToken />
+                <input type="hidden" name="ReturnUrl" value="@_currentUrl" />
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Logout" FullWidth="true" Class="justify-start px-4">
+                    Sign out
+                </MudButton>
+            </form>
+        </Authorized>
+        <NotAuthorized>
+            <MudNavLink Href="Account/Register" Icon="@Icons.Material.Filled.PersonAdd">Register</MudNavLink>
+            <MudNavLink Href="Account/Login" Icon="@Icons.Material.Filled.Login">Sign in</MudNavLink>
+        </NotAuthorized>
+    </AuthorizeView>
+</MudNavMenu>
 
 @code {
-    private string? currentUrl;
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
 
-    protected override void OnInitialized()
+    private IReadOnlyList<WorkspaceSummary> _workspaces = [];
+    private string? _currentUrl;
+
+    protected override async Task OnInitializedAsync()
     {
-        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        _currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         NavigationManager.LocationChanged += OnLocationChanged;
+        await LoadWorkspacesAsync();
     }
 
-    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    private async Task LoadWorkspacesAsync()
     {
-        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
-        StateHasChanged();
+        if (AuthenticationState is null || (await AuthenticationState).User.Identity?.IsAuthenticated != true)
+        {
+            return;
+        }
+
+        _workspaces = await WorkspaceService.GetForUserAsync(await CurrentUser.GetIdAsync());
     }
 
-    public void Dispose()
+    private bool IsCurrent(WorkspaceSummary workspace) =>
+        _currentUrl?.StartsWith($"w/{workspace.Slug}", StringComparison.OrdinalIgnoreCase) == true;
+
+    // Reload on navigation so newly created or joined workspaces appear without a full page refresh.
+    private async void OnLocationChanged(object? sender, LocationChangedEventArgs e)
     {
-        NavigationManager.LocationChanged -= OnLocationChanged;
+        _currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        await LoadWorkspacesAsync();
+        await InvokeAsync(StateHasChanged);
     }
+
+    public void Dispose() => NavigationManager.LocationChanged -= OnLocationChanged;
 }
-

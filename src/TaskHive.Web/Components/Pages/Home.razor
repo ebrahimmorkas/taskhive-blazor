@@ -1,7 +1,92 @@
-﻿@page "/"
+@page "/"
+@inject WorkspaceService WorkspaceService
+@inject CurrentUser CurrentUser
 
-<PageTitle>Home</PageTitle>
+<PageTitle>TaskHive</PageTitle>
 
-<h1>Hello, world!</h1>
+<AuthorizeView>
+    <Authorized>
+        <div class="d-flex align-center justify-space-between mb-6 flex-wrap gap-2">
+            <div>
+                <MudText Typo="Typo.h4">Your workspaces</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">Pick a workspace to see its projects and boards.</MudText>
+            </div>
+            <MudButton Href="/workspaces/new" Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add">
+                New workspace
+            </MudButton>
+        </div>
 
-Welcome to your new app.
+        @if (_workspaces is null)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+        }
+        else if (_workspaces.Count == 0)
+        {
+            <EmptyState Icon="@Icons.Material.Filled.Workspaces" Title="No workspaces yet"
+                        Message="Create a workspace for your team, or ask a teammate to add you to theirs." />
+        }
+        else
+        {
+            <MudGrid>
+                @foreach (var workspace in _workspaces)
+                {
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudCard Elevation="1" Class="workspace-card">
+                            <MudCardHeader>
+                                <CardHeaderAvatar>
+                                    <MudAvatar Color="Color.Primary">@workspace.Name[..1].ToUpperInvariant()</MudAvatar>
+                                </CardHeaderAvatar>
+                                <CardHeaderContent>
+                                    <MudText Typo="Typo.h6">@workspace.Name</MudText>
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@workspace.Role</MudChip>
+                                </CardHeaderContent>
+                            </MudCardHeader>
+                            <MudCardContent>
+                                <MudText Typo="Typo.body2">
+                                    @workspace.ProjectCount project(s) · @workspace.MemberCount member(s)
+                                </MudText>
+                            </MudCardContent>
+                            <MudCardActions>
+                                <MudButton Href="@($"w/{workspace.Slug}")" Color="Color.Primary">Open</MudButton>
+                            </MudCardActions>
+                        </MudCard>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <div class="hero">
+            <MudIcon Icon="@Icons.Material.Filled.Hive" Style="font-size: 4rem" Color="Color.Primary" />
+            <MudText Typo="Typo.h2" Class="mt-4">Plan, track and ship, together.</MudText>
+            <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mt-2 mb-8">
+                TaskHive is a real-time Kanban workspace for teams. Changes appear on everyone's board instantly.
+            </MudText>
+            <div class="d-flex gap-3 justify-center">
+                <MudButton Href="Account/Register" Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large">Get started free</MudButton>
+                <MudButton Href="Account/Login" Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Large">Sign in</MudButton>
+            </div>
+
+            <MudGrid Class="mt-12" Justify="Justify.Center">
+                <FeatureCard Icon="@Icons.Material.Filled.ViewKanban" Title="Kanban boards" Text="Drag and drop cards between columns with priorities, assignees and due dates." />
+                <FeatureCard Icon="@Icons.Material.Filled.Bolt" Title="Real-time" Text="See teammates' changes and who is online without refreshing." />
+                <FeatureCard Icon="@Icons.Material.Filled.Lock" Title="Multi-tenant" Text="Isolated workspaces with owner, admin and member roles." />
+            </MudGrid>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState>? AuthenticationState { get; set; }
+
+    private IReadOnlyList<WorkspaceSummary>? _workspaces;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthenticationState is not null && (await AuthenticationState).User.Identity?.IsAuthenticated == true)
+        {
+            _workspaces = await WorkspaceService.GetForUserAsync(await CurrentUser.GetIdAsync());
+        }
+    }
+}
