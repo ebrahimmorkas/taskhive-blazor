@@ -1,0 +1,67 @@
+@page "/w/{Slug}/activity"
+@attribute [Authorize]
+@inject WorkspaceService WorkspaceService
+@inject CollaborationService Collaboration
+@inject CurrentUser CurrentUser
+
+<PageTitle>Activity · TaskHive</PageTitle>
+
+@if (_error is not null)
+{
+    <EmptyState Icon="@Icons.Material.Filled.SearchOff" Title="Workspace not found" Message="@_error" />
+}
+else if (_workspace is not null)
+{
+    <MudText Typo="Typo.overline">@_workspace.Name</MudText>
+    <MudText Typo="Typo.h4" Class="mb-6">Activity</MudText>
+
+    @if (_activity.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.History" Title="Nothing yet" Message="Changes in this workspace will show up here." />
+    }
+    else
+    {
+        <MudTimeline TimelinePosition="TimelinePosition.Start" Class="activity-timeline">
+            @foreach (var group in _activity.GroupBy(a => a.CreatedAtUtc.ToLocalTime().Date))
+            {
+                <MudText Typo="Typo.overline" Class="ml-12">@FormatDay(group.Key)</MudText>
+                @foreach (var entry in group)
+                {
+                    <MudTimelineItem Size="Size.Small" Color="Color.Primary">
+                        <div class="d-flex align-center gap-2">
+                            <UserAvatar Name="@entry.ActorName" />
+                            <MudText Typo="Typo.body2"><b>@entry.ActorName</b> @entry.Message</MudText>
+                            <MudText Typo="Typo.caption" Class="ml-auto">@entry.CreatedAtUtc.ToLocalTime().ToString("HH:mm")</MudText>
+                        </div>
+                    </MudTimelineItem>
+                }
+            }
+        </MudTimeline>
+    }
+}
+
+@code {
+    [Parameter]
+    public string Slug { get; set; } = string.Empty;
+
+    private WorkspaceSummary? _workspace;
+    private IReadOnlyList<ActivityView> _activity = [];
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var userId = await CurrentUser.GetIdAsync();
+        var workspace = await WorkspaceService.GetBySlugAsync(userId, Slug);
+        if (workspace.IsFailure)
+        {
+            _error = workspace.Error!.Message;
+            return;
+        }
+
+        _workspace = workspace.Value;
+        _activity = (await Collaboration.GetActivityAsync(userId, _workspace.Id, take: 100)).Value;
+    }
+
+    private static string FormatDay(DateTime day) =>
+        day == DateTime.Today ? "Today" : day == DateTime.Today.AddDays(-1) ? "Yesterday" : day.ToString("dddd, d MMM");
+}
