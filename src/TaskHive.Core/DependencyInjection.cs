@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using TaskHive.Core.Collaboration;
 using Microsoft.Extensions.DependencyInjection;
 using TaskHive.Core.Data;
 using TaskHive.Core.Projects;
@@ -23,6 +24,7 @@ public static class DependencyInjection
         services.AddScoped<WorkspaceService>();
         services.AddScoped<ProjectService>();
         services.AddScoped<TaskService>();
+        services.AddScoped<CollaborationService>();
         services.AddSingleton<IBoardNotifier, InMemoryBoardNotifier>();
         services.AddSingleton<PresenceTracker>();
 
