@@ -1,0 +1,53 @@
+@inject CollaborationService Collaboration
+@inject CurrentUser CurrentUser
+
+<MudPaper Outlined="true" Elevation="0" Class="pa-4 mb-8">
+    <div class="d-flex align-center justify-space-between mb-2">
+        <MudText Typo="Typo.h6">My tasks</MudText>
+        @if (_tasks is { Count: > 0 })
+        {
+            <div class="d-flex gap-2">
+                <MudChip T="string" Size="Size.Small" Color="Color.Primary">@_tasks.Count open</MudChip>
+                @if (_tasks.Count(t => t.IsOverdue) is > 0 and var overdue)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Error">@overdue overdue</MudChip>
+                }
+            </div>
+        }
+    </div>
+
+    @if (_tasks is null)
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+    else if (_tasks.Count == 0)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary">Nothing assigned to you. Enjoy the calm ☕</MudText>
+    }
+    else
+    {
+        <MudList T="MyTaskView" Dense="true">
+            @foreach (var task in _tasks.Take(8))
+            {
+                <MudListItem T="MyTaskView" Href="@($"w/{task.WorkspaceSlug}/p/{task.ProjectKey}")">
+                    <div class="d-flex align-center gap-3">
+                        <MudText Typo="Typo.caption" Class="task-key" Style="min-width: 64px">@task.Key</MudText>
+                        <MudText Typo="Typo.body2" Class="flex-grow-1">@task.Title</MudText>
+                        <MudText Typo="Typo.caption" Class="d-none d-md-flex">@task.ProjectName · @task.ColumnName</MudText>
+                        @if (task.DueDate is { } due)
+                        {
+                            <MudText Typo="Typo.caption" Color="@(task.IsOverdue ? Color.Error : Color.Default)">@due.ToString("d MMM")</MudText>
+                        }
+                    </div>
+                </MudListItem>
+            }
+        </MudList>
+    }
+</MudPaper>
+
+@code {
+    private IReadOnlyList<MyTaskView>? _tasks;
+
+    protected override async Task OnInitializedAsync() =>
+        _tasks = await Collaboration.GetMyTasksAsync(await CurrentUser.GetIdAsync());
+}

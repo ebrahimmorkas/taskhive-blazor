@@ -1,3 +1,7 @@
+@inject CollaborationService Collaboration
+@inject CurrentUser CurrentUser
+@inject ISnackbar Snackbar
+
 <MudDialog>
     <TitleContent>
         <MudText Typo="Typo.h6">@(Existing is null ? "New task" : Existing.Key)</MudText>
@@ -24,6 +28,30 @@
                 <MudDatePicker @bind-Date="_dueDate" Label="Due date" Variant="Variant.Outlined" Clearable="true" Style="max-width: 200px" />
             </div>
         </MudForm>
+
+        @if (Existing is not null)
+        {
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Comments (@_comments.Count)</MudText>
+            <div class="comments">
+                @foreach (var comment in _comments)
+                {
+                    <div class="d-flex gap-2 mb-3">
+                        <UserAvatar Name="@comment.AuthorName" />
+                        <div>
+                            <MudText Typo="Typo.body2"><b>@comment.AuthorName</b> <span class="mud-text-secondary">@comment.CreatedAtUtc.ToLocalTime().ToString("d MMM, HH:mm")</span></MudText>
+                            <MudText Typo="Typo.body2" Style="white-space: pre-wrap">@comment.Body</MudText>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="d-flex gap-2 align-end">
+                <MudTextField @bind-Value="_newComment" Placeholder="Write a comment…" Lines="2" Variant="Variant.Outlined"
+                              MaxLength="@CollaborationService.MaxCommentLength" Immediate="true" />
+                <MudIconButton Icon="@Icons.Material.Filled.Send" Color="Color.Primary" aria-label="Post comment"
+                               Disabled="@string.IsNullOrWhiteSpace(_newComment)" OnClick="PostCommentAsync" />
+            </div>
+        }
     </DialogContent>
     <DialogActions>
         @if (Existing is not null)
@@ -55,8 +83,11 @@
     private TaskPriority _priority = TaskPriority.Medium;
     private string? _assigneeId;
     private DateTime? _dueDate;
+    private IReadOnlyList<CommentView> _comments = [];
+    private string? _newComment;
+    private string _userId = string.Empty;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         if (Existing is null)
         {
@@ -68,6 +99,23 @@
         _priority = Existing.Priority;
         _assigneeId = Existing.AssigneeId;
         _dueDate = Existing.DueDate?.ToDateTime(TimeOnly.MinValue);
+
+        _userId = await CurrentUser.GetIdAsync();
+        var comments = await Collaboration.GetCommentsAsync(_userId, Existing.Id);
+        _comments = comments.IsSuccess ? comments.Value : [];
+    }
+
+    private async Task PostCommentAsync()
+    {
+        var result = await Collaboration.AddCommentAsync(_userId, Existing!.Id, _newComment!);
+        if (result.IsFailure)
+        {
+            Snackbar.Add(result.Error!.Message, Severity.Warning);
+            return;
+        }
+
+        _comments = [.. _comments, result.Value];
+        _newComment = null;
     }
 
     private void Save() => MudDialog.Close(DialogResult.Ok(new TaskInput(
