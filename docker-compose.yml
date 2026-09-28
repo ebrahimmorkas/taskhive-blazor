@@ -1,0 +1,14 @@
+services:
+  taskhive:
+    build:
+      context: .
+      dockerfile: src/TaskHive.Web/Dockerfile
+    image: taskhive:local
+    container_name: taskhive
+    ports:
+      - "8080:8080"
+    volumes:
+      - taskhive-data:/home/app/data
+
+volumes:
+  taskhive-data:

@@ -52,3 +52,35 @@ jobs:
         with:
           name: test-results
           path: TestResults
+
+  docker:
+    name: Docker image smoke test
+    runs-on: ubuntu-latest
+    needs: build-and-test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/TaskHive.Web/Dockerfile
+          load: true
+          tags: taskhive:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Run container and check the app renders
+        run: |
+          docker run -d --name taskhive -p 8080:8080 taskhive:ci
+          for i in $(seq 1 30); do
+            if curl -fs http://localhost:8080/ | grep -q "Plan, track and ship"; then
+              echo "Landing page rendered"; exit 0
+            fi
+            sleep 2
+          done
+          docker logs taskhive
+          exit 1
