@@ -12,6 +12,9 @@ RUN dotnet restore src/TaskHive.Web/TaskHive.Web.csproj
 COPY src/ src/
 RUN dotnet publish src/TaskHive.Web/TaskHive.Web.csproj -c Release --no-restore -o /app/publish /p:UseAppHost=false
 
+# The chiseled image has no shell, so prepare the writable data folder here.
+RUN mkdir -p /staging/data/keys
+
 # ---------- runtime ----------
 # Chiseled: no shell or package manager, runs as the non-root "app" user.
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled AS runtime
@@ -23,6 +26,8 @@ ENV ASPNETCORE_HTTP_PORTS=8080 \
     Database__MigrateOnStartup=true
 
 COPY --from=build /app/publish .
+# Owned by the non-root app user; a named volume mounted here inherits this ownership.
+COPY --from=build --chown=$APP_UID:$APP_UID /staging/data /home/app/data
 
 # Mount a volume here to keep the SQLite database and cookie encryption keys across restarts.
 VOLUME ["/home/app/data"]
