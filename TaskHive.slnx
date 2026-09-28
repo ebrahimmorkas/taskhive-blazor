@@ -5,5 +5,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TaskHive.Tests/TaskHive.Tests.csproj" />
+    <Project Path="tests/TaskHive.Web.Tests/TaskHive.Web.Tests.csproj" />
   </Folder>
 </Solution>
