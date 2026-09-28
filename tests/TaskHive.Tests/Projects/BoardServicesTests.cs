@@ -1,5 +1,6 @@
 using TaskHive.Core.Domain;
 using TaskHive.Core.Projects;
+using TaskHive.Core.Realtime;
 using TaskHive.Core.Tasks;
 using TaskHive.Core.Workspaces;
 using TaskHive.Tests.Infrastructure;
@@ -12,6 +13,7 @@ public sealed class BoardServicesTests : IAsyncLifetime
     private WorkspaceService _workspaces = null!;
     private ProjectService _projects = null!;
     private TaskService _tasks = null!;
+    private readonly InMemoryBoardNotifier _notifier = new();
     private string _alice = null!;
     private WorkspaceSummary _workspace = null!;
 
@@ -22,7 +24,7 @@ public sealed class BoardServicesTests : IAsyncLifetime
         _db = await TestDatabase.CreateAsync();
         _workspaces = new WorkspaceService(_db, TimeProvider.System);
         _projects = new ProjectService(_db, TimeProvider.System);
-        _tasks = new TaskService(_db, TimeProvider.System);
+        _tasks = new TaskService(_db, TimeProvider.System, _notifier);
 
         _alice = (await _db.AddUserAsync("Alice")).Id;
         _workspace = (await _workspaces.CreateAsync(_alice, "Acme", Ct)).Value;
