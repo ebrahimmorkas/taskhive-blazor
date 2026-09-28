@@ -47,3 +47,48 @@ html, body {
     right: 0.75rem;
     top: 0.5rem;
 }
+
+/* ---------- Kanban board ---------- */
+.board {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(270px, 1fr);
+    gap: 1rem;
+    overflow-x: auto;
+    padding-bottom: 1rem;
+    align-items: start;
+}
+
+.board-column {
+    background: var(--mud-palette-background-gray);
+    border-radius: 12px;
+    min-height: 60vh;
+}
+
+.board-dropzone {
+    min-height: 55vh;
+}
+
+.task-card {
+    cursor: grab;
+    border-left: 4px solid transparent;
+    transition: box-shadow 0.15s ease;
+}
+
+.task-card:hover {
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+}
+
+.task-card.priority-urgent { border-left-color: var(--mud-palette-error); }
+.task-card.priority-high { border-left-color: var(--mud-palette-warning); }
+.task-card.priority-medium { border-left-color: var(--mud-palette-info); }
+
+.task-key {
+    font-weight: 600;
+    opacity: 0.7;
+}
+
+.task-title {
+    font-weight: 500;
+    word-break: break-word;
+}

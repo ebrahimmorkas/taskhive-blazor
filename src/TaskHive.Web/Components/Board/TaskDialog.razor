@@ -1,0 +1,81 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(Existing is null ? "New task" : Existing.Key)</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="_isValid">
+            <MudTextField @bind-Value="_title" Label="Title" Required="true" RequiredError="A task needs a title"
+                          MaxLength="200" Variant="Variant.Outlined" AutoFocus="true" Immediate="true" />
+            <MudTextField @bind-Value="_description" Label="Description" Lines="4" MaxLength="4000"
+                          Variant="Variant.Outlined" Class="mt-3" />
+            <div class="d-flex gap-3 mt-3 flex-wrap">
+                <MudSelect T="TaskPriority" @bind-Value="_priority" Label="Priority" Variant="Variant.Outlined" Style="min-width: 150px">
+                    @foreach (var priority in Enum.GetValues<TaskPriority>())
+                    {
+                        <MudSelectItem Value="priority">@priority</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudSelect T="string" @bind-Value="_assigneeId" Label="Assignee" Variant="Variant.Outlined" Clearable="true" Style="min-width: 200px">
+                    @foreach (var member in Members)
+                    {
+                        <MudSelectItem Value="member.UserId">@member.DisplayName</MudSelectItem>
+                    }
+                </MudSelect>
+                <MudDatePicker @bind-Date="_dueDate" Label="Due date" Variant="Variant.Outlined" Clearable="true" Style="max-width: 200px" />
+            </div>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        @if (Existing is not null)
+        {
+            <MudButton Color="Color.Error" Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Delete" OnClick="Delete" Class="mr-auto">Delete</MudButton>
+        }
+        <MudButton OnClick="() => MudDialog.Cancel()">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="!_isValid" OnClick="Save">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    /// <summary>Returned when the user chose to delete the task.</summary>
+    public const string DeleteRequested = "delete";
+
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public TaskCardView? Existing { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<MemberOption> Members { get; set; } = [];
+
+    private MudForm? _form;
+    private bool _isValid;
+    private string _title = string.Empty;
+    private string? _description;
+    private TaskPriority _priority = TaskPriority.Medium;
+    private string? _assigneeId;
+    private DateTime? _dueDate;
+
+    protected override void OnInitialized()
+    {
+        if (Existing is null)
+        {
+            return;
+        }
+
+        _title = Existing.Title;
+        _description = Existing.Description;
+        _priority = Existing.Priority;
+        _assigneeId = Existing.AssigneeId;
+        _dueDate = Existing.DueDate?.ToDateTime(TimeOnly.MinValue);
+    }
+
+    private void Save() => MudDialog.Close(DialogResult.Ok(new TaskInput(
+        _title,
+        string.IsNullOrWhiteSpace(_description) ? null : _description,
+        _priority,
+        _assigneeId,
+        _dueDate is { } date ? DateOnly.FromDateTime(date) : null)));
+
+    private void Delete() => MudDialog.Close(DialogResult.Ok(DeleteRequested));
+}

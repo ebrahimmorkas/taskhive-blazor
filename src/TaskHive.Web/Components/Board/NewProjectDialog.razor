@@ -1,0 +1,61 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">New project</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudForm @bind-IsValid="_isValid">
+            <MudTextField @bind-Value="_name" Label="Project name" Required="true" MaxLength="100"
+                          Variant="Variant.Outlined" AutoFocus="true" Immediate="true" TextChanged="SuggestKey" />
+            <MudTextField @bind-Value="_key" Label="Key" Required="true" MaxLength="10" Class="mt-3"
+                          Variant="Variant.Outlined" Immediate="true"
+                          HelperText="Prefix for task ids, e.g. WEB → WEB-12"
+                          Validation="@(new Func<string, string?>(ValidateKey))" />
+            <MudTextField @bind-Value="_description" Label="Description (optional)" Lines="2" MaxLength="1000"
+                          Variant="Variant.Outlined" Class="mt-3" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => MudDialog.Cancel()">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" Disabled="!_isValid" OnClick="Create">Create</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    public sealed record Input(string Name, string Key, string? Description);
+
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private bool _isValid;
+    private bool _keyEdited;
+    private string _name = string.Empty;
+    private string _key = string.Empty;
+    private string? _description;
+
+    // Suggest a key from the name ("Mobile App" -> "MA", "Website" -> "WEB") until the user edits it.
+    private void SuggestKey(string name)
+    {
+        if (_keyEdited && _key.Length > 0)
+        {
+            return;
+        }
+
+        var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Where(w => char.IsLetter(w[0])).ToArray();
+        _key = words.Length switch
+        {
+            0 => string.Empty,
+            1 => new string(words[0].Where(char.IsLetterOrDigit).Take(3).ToArray()).ToUpperInvariant(),
+            _ => string.Concat(words.Take(4).Select(w => char.ToUpperInvariant(w[0])))
+        };
+    }
+
+    private string? ValidateKey(string key)
+    {
+        _keyEdited = true;
+        return System.Text.RegularExpressions.Regex.IsMatch(key ?? string.Empty, "^[A-Za-z][A-Za-z0-9]{1,9}$")
+            ? null
+            : "2-10 letters or digits, starting with a letter";
+    }
+
+    private void Create() => MudDialog.Close(DialogResult.Ok(new Input(_name, _key, _description)));
+}
