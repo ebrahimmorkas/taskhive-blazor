@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TaskHive.Core.Data;
 using TaskHive.Core.Projects;
+using TaskHive.Core.Realtime;
 using TaskHive.Core.Tasks;
 using TaskHive.Core.Workspaces;
 
@@ -22,6 +23,8 @@ public static class DependencyInjection
         services.AddScoped<WorkspaceService>();
         services.AddScoped<ProjectService>();
         services.AddScoped<TaskService>();
+        services.AddSingleton<IBoardNotifier, InMemoryBoardNotifier>();
+        services.AddSingleton<PresenceTracker>();
 
         return services;
     }

@@ -6,6 +6,10 @@
 @inject CurrentUser CurrentUser
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IBoardNotifier BoardNotifier
+@inject PresenceTracker Presence
+@implements IDisposable
+@using TaskHive.Core.Realtime
 @using TaskHive.Web.Components.Board
 
 <PageTitle>@(_board?.ProjectName ?? "Board") · TaskHive</PageTitle>
@@ -21,7 +25,19 @@ else if (_board is not null)
             <MudBreadcrumbs Items="_breadcrumbs" Class="pa-0" />
             <MudText Typo="Typo.h4">@_board.ProjectName</MudText>
         </div>
-        <div class="d-flex gap-2 align-center">
+        <div class="d-flex gap-3 align-center">
+            @if (_viewers.Count > 0)
+            {
+                <div class="d-flex align-center gap-1" title="Viewing this board now">
+                    <span class="live-dot"></span>
+                    <MudAvatarGroup Max="5" Spacing="1" MaxColor="Color.Primary">
+                        @foreach (var viewer in _viewers)
+                        {
+                            <UserAvatar Name="@viewer.DisplayName" />
+                        }
+                    </MudAvatarGroup>
+                </div>
+            }
             <MudTextField @bind-Value="_filter" Placeholder="Filter cards" Adornment="Adornment.Start"
                           AdornmentIcon="@Icons.Material.Filled.Search" Variant="Variant.Outlined" Margin="Margin.Dense"
                           Immediate="true" DebounceInterval="200" OnDebounceIntervalElapsed="_ => _container?.Refresh()" Clearable="true" />
@@ -65,6 +81,69 @@ else if (_board is not null)
     private string? _error;
     private string? _filter;
     private string _userId = string.Empty;
+    private IReadOnlyList<PresentUser> _viewers = [];
+    private IDisposable? _boardSubscription;
+    private IDisposable? _presenceSession;
+    private Guid? _subscribedProjectId;
+
+    // Real-time wiring happens after the first interactive render (not during prerendering), so each
+    // open browser tab holds exactly one subscription and one presence session.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_board is null || _subscribedProjectId == _board.ProjectId)
+        {
+            return;
+        }
+
+        Unsubscribe();
+        _subscribedProjectId = _board.ProjectId;
+        _boardSubscription = BoardNotifier.Subscribe(_board.ProjectId, OnBoardChangedAsync);
+
+        Presence.PresenceChanged += OnPresenceChangedAsync;
+        var me = _board.Members.FirstOrDefault(m => m.UserId == _userId);
+        _presenceSession = await Presence.JoinAsync(_board.ProjectId, new PresentUser(_userId, me?.DisplayName ?? "You"));
+    }
+
+    private Task OnBoardChangedAsync(BoardChange change)
+    {
+        if (change.ActorId == _userId)
+        {
+            return Task.CompletedTask; // our own change is already on screen
+        }
+
+        return InvokeAsync(async () =>
+        {
+            await LoadBoardAsync(_board!.WorkspaceId);
+            Snackbar.Add($"{change.ActorName} {Describe(change.Kind)} {change.TaskKey}", Severity.Info, options => options.VisibleStateDuration = 2500);
+            StateHasChanged();
+        });
+    }
+
+    private Task OnPresenceChangedAsync(Guid projectId) =>
+        projectId != _subscribedProjectId
+            ? Task.CompletedTask
+            : InvokeAsync(() =>
+            {
+                _viewers = Presence.GetViewers(projectId);
+                StateHasChanged();
+            });
+
+    private static string Describe(BoardChangeKind kind) => kind switch
+    {
+        BoardChangeKind.TaskCreated => "created",
+        BoardChangeKind.TaskMoved => "moved",
+        BoardChangeKind.TaskDeleted => "deleted",
+        _ => "updated"
+    };
+
+    private void Unsubscribe()
+    {
+        _boardSubscription?.Dispose();
+        _presenceSession?.Dispose();
+        Presence.PresenceChanged -= OnPresenceChangedAsync;
+    }
+
+    public void Dispose() => Unsubscribe();
 
     protected override async Task OnParametersSetAsync()
     {

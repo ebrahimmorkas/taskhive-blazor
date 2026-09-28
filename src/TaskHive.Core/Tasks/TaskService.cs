@@ -3,6 +3,7 @@ using TaskHive.Core.Common;
 using TaskHive.Core.Data;
 using TaskHive.Core.Domain;
 using TaskHive.Core.Projects;
+using TaskHive.Core.Realtime;
 
 namespace TaskHive.Core.Tasks;
 
@@ -13,7 +14,10 @@ public sealed record TaskInput(
     string? AssigneeId,
     DateOnly? DueDate);
 
-public sealed class TaskService(IDbContextFactory<ApplicationDbContext> dbFactory, TimeProvider timeProvider)
+public sealed class TaskService(
+    IDbContextFactory<ApplicationDbContext> dbFactory,
+    TimeProvider timeProvider,
+    IBoardNotifier notifier)
 {
     /// <summary>Gap between neighbouring cards; leaves room for many inserts before positions get close.</summary>
     internal const double PositionStep = 1024;
@@ -70,7 +74,9 @@ public sealed class TaskService(IDbContextFactory<ApplicationDbContext> dbFactor
             return TaskErrors.Conflict;
         }
 
-        return ProjectService.ToCard(task, project.Key, await GetNamesAsync(db, task.AssigneeId, cancellationToken));
+        var card = ProjectService.ToCard(task, project.Key, await GetNamesAsync(db, task.AssigneeId, cancellationToken));
+        await PublishAsync(db, project.Id, BoardChangeKind.TaskCreated, card.Id, card.Key, userId, cancellationToken);
+        return card;
     }
 
     public async Task<Result<TaskCardView>> UpdateAsync(
@@ -116,7 +122,9 @@ public sealed class TaskService(IDbContextFactory<ApplicationDbContext> dbFactor
             return TaskErrors.Conflict;
         }
 
-        return ProjectService.ToCard(task, project.Key, await GetNamesAsync(db, task.AssigneeId, cancellationToken));
+        var card = ProjectService.ToCard(task, project.Key, await GetNamesAsync(db, task.AssigneeId, cancellationToken));
+        await PublishAsync(db, project.Id, BoardChangeKind.TaskUpdated, card.Id, card.Key, userId, cancellationToken);
+        return card;
     }
 
     /// <summary>
@@ -162,7 +170,9 @@ public sealed class TaskService(IDbContextFactory<ApplicationDbContext> dbFactor
 
         await db.SaveChangesAsync(cancellationToken);
 
-        return ProjectService.ToCard(task, project.Key, await GetNamesAsync(db, task.AssigneeId, cancellationToken));
+        var card = ProjectService.ToCard(task, project.Key, await GetNamesAsync(db, task.AssigneeId, cancellationToken));
+        await PublishAsync(db, project.Id, BoardChangeKind.TaskMoved, card.Id, card.Key, userId, cancellationToken);
+        return card;
     }
 
     public async Task<Result> DeleteAsync(string userId, Guid taskId, CancellationToken cancellationToken = default)
@@ -178,7 +188,21 @@ public sealed class TaskService(IDbContextFactory<ApplicationDbContext> dbFactor
         db.Tasks.Remove(task!);
         db.Activity.Add(ActivityEntry.Create(project!.WorkspaceId, project.Id, null, userId, $"deleted {project.Key}-{task!.Number} \"{task.Title}\"", timeProvider.GetUtcNow().UtcDateTime));
         await db.SaveChangesAsync(cancellationToken);
+        await PublishAsync(db, project.Id, BoardChangeKind.TaskDeleted, task.Id, $"{project.Key}-{task.Number}", userId, cancellationToken);
         return Result.Success();
+    }
+
+    private async Task PublishAsync(
+        ApplicationDbContext db,
+        Guid projectId,
+        BoardChangeKind kind,
+        Guid taskId,
+        string taskKey,
+        string actorId,
+        CancellationToken cancellationToken)
+    {
+        var actorName = await db.Users.Where(u => u.Id == actorId).Select(u => u.DisplayName).SingleOrDefaultAsync(cancellationToken) ?? "Someone";
+        await notifier.PublishAsync(new BoardChange(projectId, kind, taskId, taskKey, actorId, actorName));
     }
 
     internal static double CalculatePosition(IReadOnlyList<double> orderedSiblingPositions, int targetIndex)
