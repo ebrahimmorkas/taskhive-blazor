@@ -1,7 +1,12 @@
 @page "/w/{Slug}"
 @attribute [Authorize]
 @inject WorkspaceService WorkspaceService
+@inject ProjectService ProjectService
 @inject CurrentUser CurrentUser
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Navigation
+@using TaskHive.Web.Components.Board
 
 <PageTitle>@(_workspace?.Name ?? "Workspace") · TaskHive</PageTitle>
 
@@ -11,11 +16,54 @@
 }
 else if (_workspace is not null)
 {
-    <MudText Typo="Typo.overline">Workspace</MudText>
-    <MudText Typo="Typo.h4" Class="mb-6">@_workspace.Name</MudText>
+    <div class="d-flex align-center justify-space-between mb-6 flex-wrap gap-2">
+        <div>
+            <MudText Typo="Typo.overline">Workspace</MudText>
+            <MudText Typo="Typo.h4">@_workspace.Name</MudText>
+        </div>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateProjectAsync">
+            New project
+        </MudButton>
+    </div>
 
-    <EmptyState Icon="@Icons.Material.Filled.ViewKanban" Title="Projects are coming next"
-                Message="Boards for this workspace will appear here." />
+    @if (_projects.Count == 0)
+    {
+        <EmptyState Icon="@Icons.Material.Filled.ViewKanban" Title="No projects yet"
+                    Message="Create a project to get a Kanban board for your team." />
+    }
+    else
+    {
+        <MudGrid>
+            @foreach (var project in _projects)
+            {
+                var total = project.OpenTasks + project.DoneTasks;
+                <MudItem xs="12" sm="6" lg="4">
+                    <MudCard Elevation="1" Class="workspace-card">
+                        <MudCardHeader>
+                            <CardHeaderAvatar>
+                                <MudAvatar Color="Color.Secondary" Variant="Variant.Outlined">@project.Key[..Math.Min(2, project.Key.Length)]</MudAvatar>
+                            </CardHeaderAvatar>
+                            <CardHeaderContent>
+                                <MudText Typo="Typo.h6">@project.Name</MudText>
+                                <MudText Typo="Typo.caption">@project.Key</MudText>
+                            </CardHeaderContent>
+                        </MudCardHeader>
+                        <MudCardContent>
+                            @if (!string.IsNullOrEmpty(project.Description))
+                            {
+                                <MudText Typo="Typo.body2" Class="mb-3">@project.Description</MudText>
+                            }
+                            <MudProgressLinear Color="Color.Success" Value="@(total == 0 ? 0 : project.DoneTasks * 100.0 / total)" Rounded="true" Size="Size.Medium" />
+                            <MudText Typo="Typo.caption">@project.DoneTasks of @total tasks done</MudText>
+                        </MudCardContent>
+                        <MudCardActions>
+                            <MudButton Href="@($"w/{Slug}/p/{project.Key}")" Color="Color.Primary" StartIcon="@Icons.Material.Filled.ViewKanban">Open board</MudButton>
+                        </MudCardActions>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
 }
 
 @code {
@@ -23,12 +71,38 @@ else if (_workspace is not null)
     public string Slug { get; set; } = string.Empty;
 
     private WorkspaceSummary? _workspace;
+    private IReadOnlyList<ProjectSummary> _projects = [];
     private string? _error;
+    private string _userId = string.Empty;
 
     protected override async Task OnParametersSetAsync()
     {
-        var result = await WorkspaceService.GetBySlugAsync(await CurrentUser.GetIdAsync(), Slug);
+        _userId = await CurrentUser.GetIdAsync();
+        var result = await WorkspaceService.GetBySlugAsync(_userId, Slug);
         _workspace = result.IsSuccess ? result.Value : null;
         _error = result.IsFailure ? result.Error!.Message : null;
+
+        if (_workspace is not null)
+        {
+            _projects = (await ProjectService.GetForWorkspaceAsync(_userId, _workspace.Id)).Value;
+        }
+    }
+
+    private async Task CreateProjectAsync()
+    {
+        var dialog = await DialogService.ShowAsync<NewProjectDialog>("New project");
+        if (await dialog.Result is not { Canceled: false, Data: NewProjectDialog.Input input })
+        {
+            return;
+        }
+
+        var result = await ProjectService.CreateAsync(_userId, _workspace!.Id, input.Name, input.Key, input.Description);
+        if (result.IsFailure)
+        {
+            Snackbar.Add(result.Error!.Message, Severity.Warning);
+            return;
+        }
+
+        Navigation.NavigateTo($"w/{Slug}/p/{result.Value.Key}");
     }
 }

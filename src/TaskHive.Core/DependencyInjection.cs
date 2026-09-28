@@ -2,6 +2,8 @@ using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using TaskHive.Core.Data;
+using TaskHive.Core.Projects;
+using TaskHive.Core.Tasks;
 using TaskHive.Core.Workspaces;
 
 namespace TaskHive.Core;
@@ -18,6 +20,8 @@ public static class DependencyInjection
 
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<WorkspaceService>();
+        services.AddScoped<ProjectService>();
+        services.AddScoped<TaskService>();
 
         return services;
     }

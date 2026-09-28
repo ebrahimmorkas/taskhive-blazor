@@ -1,0 +1,177 @@
+@page "/w/{Slug}/p/{ProjectKey}"
+@attribute [Authorize]
+@inject WorkspaceService WorkspaceService
+@inject ProjectService ProjectService
+@inject TaskService TaskService
+@inject CurrentUser CurrentUser
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@using TaskHive.Web.Components.Board
+
+<PageTitle>@(_board?.ProjectName ?? "Board") · TaskHive</PageTitle>
+
+@if (_error is not null)
+{
+    <EmptyState Icon="@Icons.Material.Filled.SearchOff" Title="Board not found" Message="@_error" />
+}
+else if (_board is not null)
+{
+    <div class="d-flex align-center justify-space-between mb-4 flex-wrap gap-2">
+        <div>
+            <MudBreadcrumbs Items="_breadcrumbs" Class="pa-0" />
+            <MudText Typo="Typo.h4">@_board.ProjectName</MudText>
+        </div>
+        <div class="d-flex gap-2 align-center">
+            <MudTextField @bind-Value="_filter" Placeholder="Filter cards" Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Immediate="true" DebounceInterval="200" OnDebounceIntervalElapsed="_ => _container?.Refresh()" Clearable="true" />
+        </div>
+    </div>
+
+    <MudDropContainer T="TaskCardView" @ref="_container" Items="_cards" ItemsSelector="IsInColumn" ItemDropped="OnItemDroppedAsync" Class="board">
+        <ChildContent>
+            @foreach (var column in _board.Columns)
+            {
+                <MudPaper Elevation="0" Class="board-column" data-column="@column.Name">
+                    <div class="d-flex align-center justify-space-between px-2 pt-2">
+                        <MudText Typo="Typo.subtitle2">
+                            @column.Name
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Text">@_cards.Count(c => c.ColumnId == column.Id)</MudChip>
+                        </MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small" aria-label="@($"Add task to {column.Name}")"
+                                       OnClick="() => CreateTaskAsync(column.Id)" />
+                    </div>
+                    <MudDropZone T="TaskCardView" Identifier="@column.Id.ToString()" AllowReorder="true" Class="board-dropzone pa-2" />
+                </MudPaper>
+            }
+        </ChildContent>
+        <ItemRenderer>
+            <TaskCard Card="context" OnOpen="EditTaskAsync" />
+        </ItemRenderer>
+    </MudDropContainer>
+}
+
+@code {
+    [Parameter]
+    public string Slug { get; set; } = string.Empty;
+
+    [Parameter]
+    public string ProjectKey { get; set; } = string.Empty;
+
+    private MudDropContainer<TaskCardView>? _container;
+    private BoardView? _board;
+    private List<TaskCardView> _cards = [];
+    private List<BreadcrumbItem> _breadcrumbs = [];
+    private string? _error;
+    private string? _filter;
+    private string _userId = string.Empty;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _userId = await CurrentUser.GetIdAsync();
+
+        var workspace = await WorkspaceService.GetBySlugAsync(_userId, Slug);
+        if (workspace.IsFailure)
+        {
+            _error = workspace.Error!.Message;
+            return;
+        }
+
+        _breadcrumbs =
+        [
+            new BreadcrumbItem(workspace.Value.Name, href: $"w/{Slug}"),
+            new BreadcrumbItem(ProjectKey.ToUpperInvariant(), href: null, disabled: true)
+        ];
+
+        await LoadBoardAsync(workspace.Value.Id);
+    }
+
+    private async Task LoadBoardAsync(Guid workspaceId)
+    {
+        var result = await ProjectService.GetBoardAsync(_userId, workspaceId, ProjectKey);
+        if (result.IsFailure)
+        {
+            _error = result.Error!.Message;
+            return;
+        }
+
+        _board = result.Value;
+        _cards = _board.Columns.SelectMany(c => c.Tasks).ToList();
+        _container?.Refresh();
+    }
+
+    private bool IsInColumn(TaskCardView card, string zone) =>
+        card.ColumnId.ToString() == zone &&
+        (string.IsNullOrWhiteSpace(_filter) ||
+         card.Title.Contains(_filter, StringComparison.OrdinalIgnoreCase) ||
+         card.Key.Contains(_filter, StringComparison.OrdinalIgnoreCase) ||
+         card.AssigneeName?.Contains(_filter, StringComparison.OrdinalIgnoreCase) == true);
+
+    private async Task OnItemDroppedAsync(MudItemDropInfo<TaskCardView> drop)
+    {
+        var result = await TaskService.MoveAsync(_userId, drop.Item!.Id, Guid.Parse(drop.DropzoneIdentifier), drop.IndexInZone);
+        if (result.IsFailure)
+        {
+            Snackbar.Add(result.Error!.Message, Severity.Warning);
+        }
+
+        await LoadBoardAsync(_board!.WorkspaceId);
+    }
+
+    private async Task CreateTaskAsync(Guid columnId)
+    {
+        var input = await ShowTaskDialogAsync(null);
+        if (input is not TaskInput taskInput)
+        {
+            return;
+        }
+
+        var result = await TaskService.CreateAsync(_userId, _board!.ProjectId, columnId, taskInput);
+        Notify(result, $"Created {(result.IsSuccess ? result.Value.Key : string.Empty)}");
+        await LoadBoardAsync(_board.WorkspaceId);
+    }
+
+    private async Task EditTaskAsync(TaskCardView card)
+    {
+        var outcome = await ShowTaskDialogAsync(card);
+        Result? result = outcome switch
+        {
+            TaskInput input => await TaskService.UpdateAsync(_userId, card.Id, card.Version, input),
+            TaskDialog.DeleteRequested => await TaskService.DeleteAsync(_userId, card.Id),
+            _ => null
+        };
+
+        if (result is null)
+        {
+            return;
+        }
+
+        Notify(result, outcome is TaskInput ? $"Updated {card.Key}" : $"Deleted {card.Key}");
+        await LoadBoardAsync(_board!.WorkspaceId);
+    }
+
+    private async Task<object?> ShowTaskDialogAsync(TaskCardView? existing)
+    {
+        var parameters = new DialogParameters<TaskDialog>
+        {
+            { x => x.Existing, existing },
+            { x => x.Members, _board!.Members }
+        };
+
+        var dialog = await DialogService.ShowAsync<TaskDialog>(existing?.Key ?? "New task", parameters);
+        var result = await dialog.Result;
+        return result is { Canceled: false } ? result.Data : null;
+    }
+
+    private void Notify(Result result, string successMessage)
+    {
+        if (result.IsFailure)
+        {
+            Snackbar.Add(result.Error!.Message, Severity.Warning);
+        }
+        else
+        {
+            Snackbar.Add(successMessage, Severity.Success);
+        }
+    }
+}

@@ -1,0 +1,22 @@
+<MudChip T="string" Size="Size.Small" Variant="Variant.Text" Color="@ChipColor" Icon="@ChipIcon" Class="ma-0">@Priority</MudChip>
+
+@code {
+    [Parameter, EditorRequired]
+    public TaskPriority Priority { get; set; }
+
+    private Color ChipColor => Priority switch
+    {
+        TaskPriority.Urgent => Color.Error,
+        TaskPriority.High => Color.Warning,
+        TaskPriority.Medium => Color.Info,
+        _ => Color.Default
+    };
+
+    private string ChipIcon => Priority switch
+    {
+        TaskPriority.Urgent => Icons.Material.Filled.PriorityHigh,
+        TaskPriority.High => Icons.Material.Filled.KeyboardDoubleArrowUp,
+        TaskPriority.Medium => Icons.Material.Filled.DragHandle,
+        _ => Icons.Material.Filled.KeyboardArrowDown
+    };
+}
